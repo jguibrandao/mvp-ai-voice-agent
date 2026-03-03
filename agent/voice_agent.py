@@ -60,12 +60,27 @@ class DentalReceptionist(Agent):
             if opts.get("enabled") and name in ALL_TOOLS
         ]
 
+        disabled_tools = [
+            name for name, opts in config.get("tools", {}).items()
+            if not opts.get("enabled") and name in ALL_TOOLS
+        ]
+
         now = datetime.now()
         base_prompt = config.get("system_prompt", "You are a helpful assistant.")
         full_instructions = base_prompt + SCHEDULING_INSTRUCTIONS.format(
             today=now.strftime("%Y-%m-%d"),
             weekday=now.strftime("%A"),
         )
+
+        if disabled_tools:
+            names = ", ".join(disabled_tools)
+            full_instructions += (
+                f"\n\nDISABLED TOOLS: {names}. "
+                "You do NOT have access to these. If a caller asks for something "
+                "that would require a disabled tool, politely let them know that "
+                "feature is not available right now and offer an alternative or "
+                "suggest they call back later."
+            )
 
         super().__init__(
             instructions=full_instructions,
