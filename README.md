@@ -8,42 +8,18 @@ This was built as a one-day engineering challenge. The focus was on making the v
 
 ### Prerequisites
 
-- Python 3.10+
-- Node.js 18+
+- [Docker](https://docs.docker.com/get-docker/)
 - A free [LiveKit Cloud](https://cloud.livekit.io) account
-- An OpenAI API key (for LLM; TTS uses Cartesia via LiveKit Inference)
+- An OpenAI API key
 
-### 1. Clone and install
+### 1. Clone and configure
 
 ```bash
 git clone https://github.com/jguibrandao/mvp-ai-voice-agent.git
 cd mvp-ai-voice-agent
-
-# Python
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# Mac/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-
-# React admin UI
-cd web && npm install && cd ..
 ```
 
-### 2. Set up environment
-
-Install the [LiveKit CLI](https://docs.livekit.io/home/cli/cli-setup/) and authenticate:
-
-```bash
-lk cloud auth
-```
-
-Generate your `.env.local`:
-
-```bash
-lk app env -w
-```
-
-Or manually create `.env.local` in the project root:
+Create `.env.local` in the project root:
 
 ```
 LIVEKIT_API_KEY=your_key
@@ -52,38 +28,39 @@ LIVEKIT_URL=wss://your-project.livekit.cloud
 OPENAI_API_KEY=sk-...
 ```
 
-### 3. Download model files
+You can get the LiveKit values from your [LiveKit Cloud dashboard](https://cloud.livekit.io), or via the CLI: `lk cloud auth && lk app env -w`.
+
+### 2. Run
 
 ```bash
-python main.py download-files
+docker compose up --build
 ```
 
-### 4. Run everything (3 terminals)
+This starts three services: the voice agent, the admin API, and the React admin UI.
 
-```bash
-# Terminal 1 — Voice agent
-python main.py dev
+### 3. Talk to your agent
 
-# Terminal 2 — Admin API (runs on port 8001)
-python api.py
-
-# Terminal 3 — Admin UI
-cd web && npm run dev
-```
-
-### 5. Talk to your agent
-
-Open the [LiveKit Agents Playground](https://agents-playground.livekit.io/) and connect to your project. In the sidebar, set the **Agent name** field to `smileline-dental` (this enables explicit dispatch). Click connect and start talking — the agent will greet you as Sarah, the dental receptionist.
+Open the [LiveKit Agents Playground](https://agents-playground.livekit.io/) and connect to your project. Set the **Agent name** to `smileline-dental` in the sidebar, click connect, and start talking.
 
 Admin UI is at [http://localhost:5173](http://localhost:5173).
 
-### Docker alternative
+<details>
+<summary>Running without Docker (manual setup)</summary>
+
+Requires Python 3.10+ and Node.js 18+.
 
 ```bash
-docker compose up
+python -m venv .venv && .venv\Scripts\activate   # or source .venv/bin/activate
+pip install -r requirements.txt
+python main.py download-files
+
+# Three separate terminals:
+python main.py dev          # Voice agent
+python api.py               # Admin API (port 8001)
+cd web && npm install && npm run dev  # Admin UI
 ```
 
-Then open the playground and admin UI as above.
+</details>
 
 ---
 
