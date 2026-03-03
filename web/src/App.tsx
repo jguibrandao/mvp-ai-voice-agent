@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { type AgentConfig, fetchConfig, saveConfig } from "./api";
+import LatencyDashboard from "./components/LatencyDashboard";
 import PersonaConfig from "./components/PersonaConfig";
 import SystemPromptEditor from "./components/SystemPromptEditor";
 import ToolsManager from "./components/ToolsManager";
@@ -68,13 +69,14 @@ export default function App() {
           tools={config.tools}
           onChange={(t) => setConfig({ ...config, tools: t })}
         />
+        <LatencyDashboard />
       </div>
     </div>
   );
 }
 
 const containerStyle: React.CSSProperties = {
-  maxWidth: 800,
+  maxWidth: 960,
   margin: "0 auto",
   padding: "32px 20px",
 };

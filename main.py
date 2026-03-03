@@ -2,8 +2,15 @@ import logging
 
 from dotenv import load_dotenv
 from livekit import agents, rtc
-from livekit.agents import AgentServer, AgentSession, room_io
-from livekit.plugins import noise_cancellation, silero
+from livekit.agents import (
+    AgentServer,
+    AgentSession,
+    AgentStateChangedEvent,
+    UserStateChangedEvent,
+    inference,
+    room_io,
+)
+from livekit.plugins import noise_cancellation, openai, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 from agent.metrics import tracker
@@ -20,20 +27,26 @@ async def entrypoint(ctx: agents.JobContext):
     agent = DentalReceptionist()
 
     session = AgentSession(
-        stt="deepgram/flux",
-        llm="google/gemini-3-flash",
-        tts=f"openai/tts-1:{agent.voice}",
+        stt=inference.STT(model="deepgram/nova-3", language="en"),
+        llm=openai.LLM(model="gpt-4.1-nano"),
+        tts=f"cartesia/sonic-turbo:{agent.voice}",
         vad=silero.VAD.load(),
         turn_detection=MultilingualModel(),
+        min_endpointing_delay=0.2,
+        max_endpointing_delay=0.8,
     )
 
-    @session.on("user_speech_committed")
-    def on_user_speech_committed(*args):
-        tracker.mark_user_speech_end()
+    @session.on("user_state_changed")
+    def on_user_state_changed(event: UserStateChangedEvent):
+        if event.old_state == "speaking" and event.new_state == "listening":
+            tracker.mark_user_speech_end()
 
-    @session.on("agent_speech_started")
-    def on_agent_speech_started(*args):
-        tracker.mark_agent_speech_start()
+    @session.on("agent_state_changed")
+    def on_agent_state_changed(event: AgentStateChangedEvent):
+        if event.new_state == "thinking":
+            tracker.mark_agent_thinking_start()
+        elif event.new_state == "speaking":
+            tracker.mark_agent_speech_start()
 
     await session.start(
         room=ctx.room,

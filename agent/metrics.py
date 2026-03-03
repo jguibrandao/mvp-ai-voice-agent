@@ -1,61 +1,116 @@
+import json
 import logging
 import time
-from collections import deque
-from dataclasses import dataclass, field
+from pathlib import Path
 
 logger = logging.getLogger("latency")
 
+METRICS_FILE = Path(__file__).resolve().parent.parent / "metrics_data.json"
 MAX_HISTORY = 100
 
 
-@dataclass
-class LatencyRecord:
-    timestamp: float
-    end_to_end_ms: float
-    event_type: str
+def _load_history() -> list[dict]:
+    try:
+        data = json.loads(METRICS_FILE.read_text())
+        return data if isinstance(data, list) else []
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def _save_history(history: list[dict]) -> None:
+    trimmed = history[-MAX_HISTORY:]
+    METRICS_FILE.write_text(json.dumps(trimmed, indent=2))
+
+
+def _safe_log(msg: str) -> None:
+    try:
+        logger.info(msg)
+    except UnicodeEncodeError:
+        pass
+
+
+def _summarize_field(history: list[dict], field: str) -> dict:
+    values = [r[field] for r in history if field in r and r[field] is not None]
+    if not values:
+        return {"avg": 0, "min": 0, "max": 0}
+    return {
+        "avg": round(sum(values) / len(values), 1),
+        "min": min(values),
+        "max": max(values),
+    }
 
 
 class LatencyTracker:
     def __init__(self) -> None:
-        self._history: deque[LatencyRecord] = deque(maxlen=MAX_HISTORY)
-        self._pending_start: float | None = None
+        self._user_speech_end: float | None = None
+        self._thinking_start: float | None = None
 
     def mark_user_speech_end(self) -> None:
-        self._pending_start = time.perf_counter()
+        self._user_speech_end = time.perf_counter()
+        self._thinking_start = None
+
+    def mark_agent_thinking_start(self) -> None:
+        if self._user_speech_end is None:
+            return
+        self._thinking_start = time.perf_counter()
+        ttft_ms = (self._thinking_start - self._user_speech_end) * 1000
+        _safe_log(f"TTFT: {ttft_ms:.1f}ms")
 
     def mark_agent_speech_start(self) -> None:
-        if self._pending_start is None:
+        if self._user_speech_end is None:
             return
-        elapsed_ms = (time.perf_counter() - self._pending_start) * 1000
-        record = LatencyRecord(
-            timestamp=time.time(),
-            end_to_end_ms=round(elapsed_ms, 1),
-            event_type="turn_response",
-        )
-        self._history.append(record)
-        logger.info(f"Response latency: {record.end_to_end_ms}ms")
-        self._pending_start = None
+        now = time.perf_counter()
+        e2e_ms = (now - self._user_speech_end) * 1000
 
-    def get_summary(self) -> dict:
-        if not self._history:
-            return {"count": 0, "avg_ms": 0, "min_ms": 0, "max_ms": 0, "recent": []}
+        ttft_ms = None
+        processing_ms = None
+        if self._thinking_start is not None:
+            ttft_ms = round((self._thinking_start - self._user_speech_end) * 1000, 1)
+            processing_ms = round((now - self._thinking_start) * 1000, 1)
 
-        values = [r.end_to_end_ms for r in self._history]
-        recent = [
-            {
-                "timestamp": r.timestamp,
-                "end_to_end_ms": r.end_to_end_ms,
-                "event_type": r.event_type,
-            }
-            for r in list(self._history)[-10:]
-        ]
-        return {
-            "count": len(values),
-            "avg_ms": round(sum(values) / len(values), 1),
-            "min_ms": min(values),
-            "max_ms": max(values),
-            "recent": recent,
+        record = {
+            "timestamp": time.time(),
+            "ttft_ms": ttft_ms,
+            "processing_ms": processing_ms,
+            "end_to_end_ms": round(e2e_ms, 1),
         }
+        history = _load_history()
+        history.append(record)
+        _save_history(history)
+
+        parts = [f"E2E: {record['end_to_end_ms']}ms"]
+        if ttft_ms is not None:
+            parts.append(f"TTFT: {ttft_ms}ms")
+        if processing_ms is not None:
+            parts.append(f"LLM+TTS: {processing_ms}ms")
+        _safe_log(" | ".join(parts))
+
+        self._user_speech_end = None
+        self._thinking_start = None
+
+    @staticmethod
+    def get_summary() -> dict:
+        history = _load_history()
+        if not history:
+            return {
+                "count": 0,
+                "ttft": {"avg": 0, "min": 0, "max": 0},
+                "processing": {"avg": 0, "min": 0, "max": 0},
+                "end_to_end": {"avg": 0, "min": 0, "max": 0},
+                "recent": [],
+            }
+
+        return {
+            "count": len(history),
+            "ttft": _summarize_field(history, "ttft_ms"),
+            "processing": _summarize_field(history, "processing_ms"),
+            "end_to_end": _summarize_field(history, "end_to_end_ms"),
+            "recent": history[-10:],
+        }
+
+    @staticmethod
+    def clear() -> None:
+        _save_history([])
 
 
 tracker = LatencyTracker()

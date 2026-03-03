@@ -17,6 +17,27 @@ export interface AgentConfig {
   tools: Record<string, ToolConfig>;
 }
 
+export interface LatencyRecord {
+  timestamp: number;
+  ttft_ms: number | null;
+  processing_ms: number | null;
+  end_to_end_ms: number;
+}
+
+export interface MetricBucket {
+  avg: number;
+  min: number;
+  max: number;
+}
+
+export interface MetricsSummary {
+  count: number;
+  ttft: MetricBucket;
+  processing: MetricBucket;
+  end_to_end: MetricBucket;
+  recent: LatencyRecord[];
+}
+
 export async function fetchConfig(): Promise<AgentConfig> {
   const res = await fetch(`${BASE}/config`);
   if (!res.ok) throw new Error("Failed to fetch config");
@@ -30,4 +51,15 @@ export async function saveConfig(config: AgentConfig): Promise<void> {
     body: JSON.stringify(config),
   });
   if (!res.ok) throw new Error("Failed to save config");
+}
+
+export async function fetchMetrics(): Promise<MetricsSummary> {
+  const res = await fetch(`${BASE}/metrics`);
+  if (!res.ok) throw new Error("Failed to fetch metrics");
+  return res.json();
+}
+
+export async function clearMetrics(): Promise<void> {
+  const res = await fetch(`${BASE}/metrics`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to clear metrics");
 }

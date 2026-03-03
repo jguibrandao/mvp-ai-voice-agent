@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from agent.config_manager import load_config, save_config
-from agent.metrics import tracker
+from agent.metrics import LatencyTracker
 
 app = FastAPI(title="SmileLine Dental Admin API")
 
@@ -37,8 +37,14 @@ def update_config(config: dict):
 
 @app.get("/api/metrics")
 def get_metrics():
-    return tracker.get_summary()
+    return LatencyTracker.get_summary()
+
+
+@app.delete("/api/metrics")
+def clear_metrics():
+    LatencyTracker.clear()
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":
-    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("api:app", host="0.0.0.0", port=8001, reload=True)
