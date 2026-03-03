@@ -1,0 +1,28 @@
+services:
+  agent:
+    build: .
+    command: python main.py dev
+    env_file: .env.local
+    volumes:
+      - ./agent_config.json:/app/agent_config.json
+    depends_on:
+      - api
+
+  api:
+    build: .
+    command: python api.py
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./agent_config.json:/app/agent_config.json
+
+  web:
+    image: node:20-slim
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./web:/app
+    environment:
+      - VITE_API_URL=http://localhost:8000
