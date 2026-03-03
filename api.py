@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from agent.config_manager import load_config, save_config
+from agent.metrics import tracker
 
 app = FastAPI(title="SmileLine Dental Admin API")
 
@@ -32,6 +33,11 @@ def update_config(config: dict):
         )
     save_config(config)
     return {"status": "ok"}
+
+
+@app.get("/api/metrics")
+def get_metrics():
+    return tracker.get_summary()
 
 
 if __name__ == "__main__":

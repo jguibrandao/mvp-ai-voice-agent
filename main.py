@@ -1,12 +1,16 @@
+import logging
+
 from dotenv import load_dotenv
 from livekit import agents, rtc
 from livekit.agents import AgentServer, AgentSession, room_io
 from livekit.plugins import noise_cancellation, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
+from agent.metrics import tracker
 from agent.voice_agent import DentalReceptionist
 
 load_dotenv(".env.local")
+logging.basicConfig(level=logging.INFO)
 
 server = AgentServer()
 
@@ -22,6 +26,14 @@ async def entrypoint(ctx: agents.JobContext):
         vad=silero.VAD.load(),
         turn_detection=MultilingualModel(),
     )
+
+    @session.on("user_speech_committed")
+    def on_user_speech_committed(*args):
+        tracker.mark_user_speech_end()
+
+    @session.on("agent_speech_started")
+    def on_agent_speech_started(*args):
+        tracker.mark_agent_speech_start()
 
     await session.start(
         room=ctx.room,
