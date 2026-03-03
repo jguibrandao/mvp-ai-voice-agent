@@ -8,6 +8,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY agent/ agent/
 COPY main.py api.py agent_config.json ./
 
-EXPOSE 8000
+EXPOSE 8001
 
 CMD ["python", "api.py"]
