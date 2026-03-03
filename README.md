@@ -142,9 +142,9 @@ Pipecat is a great framework too, but it would have required more setup for brow
 | Decision | Why |
 |----------|-----|
 | JSON file config (not DB) | Project spec says no database. JSON is readable, easy to debug, and sufficient for single-user. |
-| OpenAI GPT-4o-mini for LLM | Fast, cheap, and good enough for tool calling. GPT-4o would be better but slower and more expensive. |
-| Deepgram Nova-3 for STT | Industry-leading accuracy and speed for voice. Runs through LiveKit Cloud inference. |
-| OpenAI TTS-1 for voice | Multiple voice options, natural-sounding, and the user already has an OpenAI key. |
+| Google Gemini 3 Flash for LLM | Latest and fastest Google model available through LiveKit inference. For voice, speed beats raw intelligence — every 100ms matters. Demonstrates multi-vendor thinking instead of defaulting to OpenAI for everything. |
+| Deepgram Flux for STT | Deepgram's newest model, built specifically for voice agents with ultra-low latency. Runs through LiveKit Cloud inference. |
+| OpenAI TTS-1 for voice | Multiple voice options, natural-sounding. Best-of-breed approach: each component uses the provider that excels at that specific task. |
 | FastAPI for admin API | Lightweight, async, auto-generates OpenAPI docs. Overkill vs Flask for 2 endpoints, but it's what I'd use in production. |
 | Vite + React for UI | Fast dev server, TypeScript support out of the box. No CSS framework — inline styles keep it simple for a functional UI. |
 | Config reload per conversation | Agent reads JSON at session start. Simple, reliable, no hot-reload complexity. |

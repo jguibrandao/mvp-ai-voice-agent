@@ -20,8 +20,8 @@ async def entrypoint(ctx: agents.JobContext):
     agent = DentalReceptionist()
 
     session = AgentSession(
-        stt="deepgram/nova-3",
-        llm="openai/gpt-4o-mini",
+        stt="deepgram/flux",
+        llm="google/gemini-3-flash",
         tts=f"openai/tts-1:{agent.voice}",
         vad=silero.VAD.load(),
         turn_detection=MultilingualModel(),
