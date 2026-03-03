@@ -5,6 +5,9 @@ services:
     env_file: .env.local
     volumes:
       - ./agent_config.json:/app/agent_config.json
+      - metrics:/app/data
+    environment:
+      - METRICS_FILE=/app/data/metrics_data.json
     depends_on:
       - api
 
@@ -15,7 +18,9 @@ services:
       - "8001:8001"
     volumes:
       - ./agent_config.json:/app/agent_config.json
-      - ./metrics_data.json:/app/metrics_data.json
+      - metrics:/app/data
+    environment:
+      - METRICS_FILE=/app/data/metrics_data.json
 
   web:
     image: node:20-slim
@@ -27,3 +32,6 @@ services:
       - ./web:/app
     environment:
       - VITE_API_URL=http://api:8001
+
+volumes:
+  metrics:

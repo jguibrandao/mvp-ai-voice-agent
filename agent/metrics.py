@@ -1,11 +1,13 @@
 import json
 import logging
+import os
 import time
 from pathlib import Path
 
 logger = logging.getLogger("latency")
 
-METRICS_FILE = Path(__file__).resolve().parent.parent / "metrics_data.json"
+_default = Path(__file__).resolve().parent.parent / "metrics_data.json"
+METRICS_FILE = Path(os.environ.get("METRICS_FILE", str(_default)))
 MAX_HISTORY = 100
 
 
@@ -19,6 +21,7 @@ def _load_history() -> list[dict]:
 
 def _save_history(history: list[dict]) -> None:
     trimmed = history[-MAX_HISTORY:]
+    METRICS_FILE.parent.mkdir(parents=True, exist_ok=True)
     METRICS_FILE.write_text(json.dumps(trimmed, indent=2))
 
 
