@@ -1,17 +1,55 @@
+import asyncio
 from datetime import datetime, timedelta
 
 from livekit.agents import function_tool, RunContext
 
 MOCK_APPOINTMENTS: dict[str, list[dict]] = {}
 
+WEEKDAY_HOURS = (8, 18)
+SATURDAY_HOURS = (9, 14)
+
+
+def _normalize_time(raw: str) -> str:
+    raw = raw.strip()
+    for fmt in ("%H:%M", "%I:%M %p", "%I:%M%p", "%I %p", "%I%p"):
+        try:
+            return datetime.strptime(raw, fmt).strftime("%H:%M")
+        except ValueError:
+            continue
+    return raw
+
 
 def _generate_slots(date_str: str) -> list[str]:
-    booked = {
-        appt["time"]
-        for appt in MOCK_APPOINTMENTS.get(date_str, [])
-    }
-    all_slots = [f"{h}:00" for h in range(9, 17)]
+    try:
+        parsed = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return []
+
+    weekday = parsed.weekday()
+
+    if weekday == 6:
+        return []
+
+    if weekday == 5:
+        start_h, end_h = SATURDAY_HOURS
+    else:
+        start_h, end_h = WEEKDAY_HOURS
+
+    booked = {appt["time"] for appt in MOCK_APPOINTMENTS.get(date_str, [])}
+    all_slots = [f"{h:02d}:00" for h in range(start_h, end_h)]
     return [s for s in all_slots if s not in booked]
+
+
+def _format_slot_12h(slot_24h: str) -> str:
+    result = datetime.strptime(slot_24h, "%H:%M").strftime("%I:%M %p")
+    if result.startswith("0"):
+        result = result[1:]
+    return result
+
+
+def _day_label(date_str: str) -> str:
+    parsed = datetime.strptime(date_str, "%Y-%m-%d").date()
+    return parsed.strftime("%A, %B %d, %Y")
 
 
 @function_tool()
@@ -27,19 +65,51 @@ async def check_availability(
     try:
         parsed = datetime.strptime(date, "%Y-%m-%d").date()
     except ValueError:
-        return {"error": "Invalid date format. Please use YYYY-MM-DD."}
+        return {
+            "available": False,
+            "reason": "I couldn't understand that date. Could you give me the date in a format like 2026-03-10?",
+        }
 
-    if parsed < datetime.now().date():
-        return {"error": "Cannot check availability for past dates."}
+    today = datetime.now().date()
 
-    if parsed > datetime.now().date() + timedelta(days=60):
-        return {"error": "Cannot book more than 60 days in advance."}
+    if parsed < today:
+        return {
+            "available": False,
+            "reason": f"That date ({_day_label(date)}) is in the past. Could you pick a future date?",
+        }
+
+    if parsed > today + timedelta(days=60):
+        return {
+            "available": False,
+            "reason": "We can only schedule up to 60 days out. Could you pick a closer date?",
+        }
+
+    if parsed.weekday() == 6:
+        return {
+            "available": False,
+            "reason": f"{_day_label(date)} is a Sunday and the clinic is closed. We're open Monday through Saturday.",
+        }
 
     slots = _generate_slots(date)
     if not slots:
-        return {"date": date, "available_slots": [], "message": "No slots available."}
+        return {
+            "date": date,
+            "day": _day_label(date),
+            "available": False,
+            "reason": "All slots are booked for that day. Would you like to try another date?",
+        }
 
-    return {"date": date, "available_slots": slots}
+    display_slots = [_format_slot_12h(s) for s in slots]
+    hours = "8 AM to 6 PM" if parsed.weekday() < 5 else "9 AM to 2 PM"
+
+    return {
+        "date": date,
+        "day": _day_label(date),
+        "available": True,
+        "clinic_hours": hours,
+        "slots": display_slots,
+        "total_open": len(display_slots),
+    }
 
 
 @function_tool()
@@ -50,37 +120,75 @@ async def book_appointment(
     time: str,
     procedure: str,
 ) -> dict:
-    """Book a dental appointment for a patient.
+    """Book a dental appointment for a patient. Always call check_availability first.
 
     Args:
         patient_name: Full name of the patient.
         date: Appointment date in YYYY-MM-DD format.
-        time: Appointment time in HH:MM format.
+        time: Appointment time in HH:MM 24-hour format (e.g. 09:00, 14:00).
         procedure: Type of procedure (cleaning, checkup, filling, extraction, whitening, consultation).
     """
+    normalized_time = _normalize_time(time)
+
+    try:
+        parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        return {
+            "booked": False,
+            "reason": "I couldn't understand that date. Could you say it again?",
+        }
+
+    if parsed_date < datetime.now().date():
+        return {
+            "booked": False,
+            "reason": "That date is in the past. Let's pick a future date.",
+        }
+
+    if parsed_date.weekday() == 6:
+        return {
+            "booked": False,
+            "reason": "The clinic is closed on Sundays.",
+        }
+
     available = _generate_slots(date)
-    if time not in available:
-        return {"error": f"Time slot {time} is not available on {date}."}
+    if normalized_time not in available:
+        display_available = [_format_slot_12h(s) for s in available[:5]]
+        if available:
+            return {
+                "booked": False,
+                "reason": f"That time slot isn't available on {_day_label(date)}. "
+                          f"Open slots include: {', '.join(display_available)}.",
+            }
+        return {
+            "booked": False,
+            "reason": f"There are no slots available on {_day_label(date)}. Would you like to try another day?",
+        }
+
+    confirmation_id = f"SLD-{len(MOCK_APPOINTMENTS.get(date, [])) + 1:04d}"
 
     appointment = {
         "patient_name": patient_name,
         "date": date,
-        "time": time,
+        "time": normalized_time,
         "procedure": procedure,
-        "confirmation_id": f"SLD-{len(MOCK_APPOINTMENTS.get(date, [])) + 1:04d}",
+        "confirmation_id": confirmation_id,
     }
 
     MOCK_APPOINTMENTS.setdefault(date, []).append(appointment)
 
+    display_time = _format_slot_12h(normalized_time)
     return {
-        "status": "confirmed",
-        "confirmation_id": appointment["confirmation_id"],
-        "message": f"Appointment booked for {patient_name} on {date} at {time} for {procedure}.",
+        "booked": True,
+        "confirmation_id": confirmation_id,
+        "patient_name": patient_name,
+        "date": _day_label(date),
+        "time": display_time,
+        "procedure": procedure,
     }
 
 
 CLINIC_INFO = {
-    "hours": "Monday to Friday 8:00 AM - 6:00 PM, Saturday 9:00 AM - 2:00 PM. Closed on Sundays.",
+    "hours": "Monday to Friday 8:00 AM to 6:00 PM, Saturday 9:00 AM to 2:00 PM. Closed on Sundays.",
     "location": "123 Bright Smile Avenue, Suite 200, Downtown. Free parking available in the building garage.",
     "services": "General dentistry, cleanings, fillings, extractions, teeth whitening, root canals, crowns, veneers, and orthodontic consultations.",
     "insurance": "We accept Delta Dental, Cigna, Aetna, MetLife, and most major PPO plans. We also offer a self-pay discount of 15%.",
@@ -111,13 +219,18 @@ async def get_clinic_info(
     }
 
 
+async def _end_session_after_farewell(session, delay: float = 10.0) -> None:
+    await asyncio.sleep(delay)
+    await session.aclose()
+
+
 @function_tool()
 async def transfer_call(
     context: RunContext,
     department: str,
     reason: str,
 ) -> dict:
-    """Transfer the call to a specific department.
+    """Transfer the call to a specific department. This ends the current conversation.
 
     Args:
         department: Department to transfer to (front_desk, dentist, billing, manager).
@@ -135,12 +248,34 @@ async def transfer_call(
 
     if not dest:
         return {
-            "error": f"Unknown department '{department}'. Available: front desk, dentist, billing, manager."
+            "transferred": False,
+            "reason": f"I'm not sure which department you mean by '{department}'. I can transfer you to the front desk, dentist, billing, or manager.",
         }
 
+    asyncio.create_task(_end_session_after_farewell(context.session))
+
     return {
-        "status": "transferring",
+        "transferred": True,
         "destination": dest,
         "reason": reason,
-        "message": f"Transferring you to {dest}. Please hold.",
+        "instructions": "Say a warm farewell. Tell the caller you are transferring them now, they may hear a brief silence, and thank them for calling SmileLine Dental.",
+    }
+
+
+@function_tool()
+async def end_call(
+    context: RunContext,
+    reason: str,
+) -> dict:
+    """End the call politely. Use when the caller confirms they don't need anything else.
+
+    Args:
+        reason: Brief reason the call is ending (e.g. "caller is done", "all questions answered").
+    """
+    asyncio.create_task(_end_session_after_farewell(context.session))
+
+    return {
+        "ending": True,
+        "reason": reason,
+        "instructions": "Say a warm goodbye. Thank them for calling SmileLine Dental and wish them a great day. Do NOT ask any more questions.",
     }

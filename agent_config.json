@@ -3,7 +3,7 @@
   "persona": {
     "name": "Sarah",
     "greeting": "Hi there! Thanks for calling SmileLine Dental, this is Sarah. How can I help you today?",
-    "voice": "alloy"
+    "voice": "9626c31c-bec5-4cca-baa8-f8ba9e84c8bc"
   },
   "tools": {
     "check_availability": {
@@ -21,6 +21,10 @@
     "transfer_call": {
       "enabled": true,
       "description": "Transfer the call to a specific department (front desk, dentist, billing)"
+    },
+    "end_call": {
+      "enabled": true,
+      "description": "End the call politely when the caller is done"
     }
   }
 }
