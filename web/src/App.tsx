@@ -17,19 +17,22 @@ export default function App() {
       .catch(() => setError("Failed to load config. Is the API server running?"));
   }, []);
 
-  const handleSave = useCallback(async () => {
-    if (!config) return;
+  const persistConfig = useCallback(async (cfg: AgentConfig) => {
     setSaving(true);
     setStatus(null);
     try {
-      await saveConfig(config);
+      await saveConfig(cfg);
       setStatus("Saved! Changes will apply to the next conversation.");
     } catch {
       setStatus("Failed to save.");
     } finally {
       setSaving(false);
     }
-  }, [config]);
+  }, []);
+
+  const handleSave = useCallback(() => {
+    if (config) persistConfig(config);
+  }, [config, persistConfig]);
 
   if (error) {
     return (
@@ -59,15 +62,19 @@ export default function App() {
       <div style={gridStyle}>
         <SystemPromptEditor
           value={config.system_prompt}
-          onChange={(v) => setConfig({ ...config, system_prompt: v })}
+          onChange={(v) => setConfig((prev) => prev ? { ...prev, system_prompt: v } : prev)}
         />
         <PersonaConfig
           persona={config.persona}
-          onChange={(p) => setConfig({ ...config, persona: p })}
+          onChange={(p) => setConfig((prev) => prev ? { ...prev, persona: p } : prev)}
         />
         <ToolsManager
           tools={config.tools}
-          onChange={(t) => setConfig({ ...config, tools: t })}
+          onChange={(t) => {
+            const updated = { ...config, tools: t };
+            setConfig(updated);
+            persistConfig(updated);
+          }}
         />
         <LatencyDashboard />
       </div>
