@@ -218,9 +218,11 @@ Pipecat is a great framework too, but it would have required more setup for brow
 
 ---
 
-## Loom Video
+## Demo Video
 
-[Link to 5-minute demo video] — TODO
+[Watch the 5-minute demo](https://streamable.com/99gxh2)
+
+> Loom wasn't capturing my microphone audio, so I recorded the demo with another tool and uploaded it to Streamable.
 
 ---
 
