@@ -1,4 +1,5 @@
 import asyncio
+import re
 from datetime import datetime, timedelta
 
 from livekit.agents import function_tool, RunContext
@@ -8,6 +9,11 @@ MOCK_APPOINTMENTS: dict[str, list[dict]] = {}
 WEEKDAY_HOURS = (8, 18)
 SATURDAY_HOURS = (9, 14)
 
+_WEEKDAYS = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
+}
+
 
 def _normalize_time(raw: str) -> str:
     raw = raw.strip()
@@ -16,6 +22,35 @@ def _normalize_time(raw: str) -> str:
             return datetime.strptime(raw, fmt).strftime("%H:%M")
         except ValueError:
             continue
+    return raw
+
+
+def _resolve_date(raw: str) -> str:
+    clean = raw.strip().lower()
+    today = datetime.now().date()
+
+    if clean == "today":
+        return today.strftime("%Y-%m-%d")
+    if clean in ("tomorrow", "tmrw"):
+        return (today + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    next_match = re.match(r"next\s+(\w+)", clean)
+    if next_match:
+        day_name = next_match.group(1)
+        if day_name in _WEEKDAYS:
+            target = _WEEKDAYS[day_name]
+            days_ahead = (target - today.weekday()) % 7
+            if days_ahead == 0:
+                days_ahead = 7
+            return (today + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+
+    for day_name, day_num in _WEEKDAYS.items():
+        if clean == day_name:
+            days_ahead = (day_num - today.weekday()) % 7
+            if days_ahead == 0:
+                days_ahead = 7
+            return (today + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+
     return raw
 
 
@@ -60,8 +95,9 @@ async def check_availability(
     """Check available appointment slots for a given date.
 
     Args:
-        date: The date to check in YYYY-MM-DD format.
+        date: The date to check. Accepts YYYY-MM-DD, or relative like "today", "tomorrow", "next Monday", "Friday".
     """
+    date = _resolve_date(date)
     try:
         parsed = datetime.strptime(date, "%Y-%m-%d").date()
     except ValueError:
@@ -124,10 +160,11 @@ async def book_appointment(
 
     Args:
         patient_name: Full name of the patient.
-        date: Appointment date in YYYY-MM-DD format.
+        date: Appointment date. Accepts YYYY-MM-DD, or relative like "today", "tomorrow", "next Monday".
         time: Appointment time in HH:MM 24-hour format (e.g. 09:00, 14:00).
         procedure: Type of procedure (cleaning, checkup, filling, extraction, whitening, consultation).
     """
+    date = _resolve_date(date)
     normalized_time = _normalize_time(time)
 
     try:
